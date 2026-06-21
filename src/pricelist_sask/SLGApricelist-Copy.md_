@@ -1,0 +1,24 @@
+Read file 20260601.xlsx
+and load data into the pricelist_sk
+use following mapping 
+table_field - xls_documet_field:
+price_date - take from file name in the format yyyyMMDD
+cspcid - item
+pid -UPC
+description - Item Description
+size_id  - Size (mL)
+deposit -  Refund Dep
+wholesale -  Wholesale Base Price 
+category - everything after the first word with dash in the column "Product Hierarchy"
+"group" - the first word in the column "Product Hierarchy"
+supplier-  Manufacturer Name 
+sweetness -Sweetness
+alcohol - Alcohol Content (%)
+multiple -Units/Case
+
+use following db credentials
+host: localhost
+database: bottlebridge
+schema: public
+username: olena
+password: Barnet359?
