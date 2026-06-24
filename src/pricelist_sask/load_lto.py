@@ -14,18 +14,21 @@ DB_CONFIG = {
     'password': 'Barnet359?',
 }
 
-TARGET_TABLE = 'public.LTO_sk'
+TARGET_TABLE = 'public.lto'
 
 HEADER_TO_FIELD = {
     'WPP Start Date': 'date_from',
     'WPP End Date': 'date_to',
     'SLGA Item No.': 'cspcid',
-    'Wholesale Base Price': 'wholesale',
-    'WPP Savings': 'LTO',
+    'Wholesale Base Price': 'new_price',
+    'WPP Savings': 'price_diff',
 }
 
-INSERT_COLUMNS = ['cspcid', 'date_from', 'date_to', 'lto', 'wholesale']
-CONFLICT_COLUMNS = ['cspcid', 'date_from', 'date_to']
+PROVINCE = 'SK'
+
+INSERT_COLUMNS = ['province', 'cspcid', 'date_from', 'date_to', 'new_price', 'price_diff']
+CONFLICT_COLUMNS = ['province', 'cspcid', 'date_from', 'date_to']
+UPDATE_COLUMNS = ['new_price', 'price_diff']
 
 
 def build_row(header_map: Dict[str, int], row_values: List[Any]) -> Optional[List[Any]]:
@@ -37,11 +40,12 @@ def build_row(header_map: Dict[str, int], row_values: List[Any]) -> Optional[Lis
         return None
 
     return [
+        PROVINCE,
         raw.get('SLGA Item No.'),
         raw.get('WPP Start Date'),
         raw.get('WPP End Date'),
-        raw.get('WPP Savings'),
         raw.get('Wholesale Base Price'),
+        raw.get('WPP Savings'),
     ]
 
 
@@ -75,47 +79,47 @@ def load_into_db(rows: List[List[Any]]) -> None:
 
     with psycopg2.connect(**DB_CONFIG) as conn:
         with conn.cursor() as cursor:
-            # Stage into a temp table
             cursor.execute("""
                 CREATE TEMP TABLE tmp_lto (
+                    province  varchar(50),
                     cspcid    varchar(32),
                     date_from date,
                     date_to   date,
-                    lto       numeric(12,5),
-                    wholesale numeric(12,5)
+                    new_price numeric(12,5),
+                    price_diff numeric(12,5)
                 ) ON COMMIT DROP
             """)
             execute_values(
                 cursor,
-                "INSERT INTO tmp_lto (cspcid, date_from, date_to, lto, wholesale) VALUES %s",
+                "INSERT INTO tmp_lto (province, cspcid, date_from, date_to, new_price, price_diff) VALUES %s",
                 rows,
             )
 
-            # Update existing rows; only overwrite lto/wholesale when incoming value is not null
             cursor.execute(f"""
                 UPDATE {TARGET_TABLE} t
-                SET lto = CASE
-                        WHEN s.lto IS NOT NULL THEN s.lto
-                        ELSE t.lto
+                SET new_price = CASE
+                        WHEN s.new_price IS NOT NULL THEN s.new_price
+                        ELSE t.new_price
                       END,
-                    wholesale = CASE
-                        WHEN s.wholesale IS NOT NULL THEN s.wholesale
-                        ELSE t.wholesale
+                    price_diff = CASE
+                        WHEN s.price_diff IS NOT NULL THEN s.price_diff
+                        ELSE t.price_diff
                       END
                 FROM tmp_lto s
-                WHERE t.cspcid    = s.cspcid
+                WHERE t.province  = s.province
+                  AND t.cspcid    = s.cspcid
                   AND t.date_from = s.date_from
                   AND t.date_to   = s.date_to
             """)
             updated = cursor.rowcount
 
-            # Insert rows that don't exist yet
             cursor.execute(f"""
-                INSERT INTO {TARGET_TABLE} (cspcid, date_from, date_to, lto, wholesale)
-                SELECT s.cspcid, s.date_from, s.date_to, s.lto, s.wholesale
+                INSERT INTO {TARGET_TABLE} (province, cspcid, date_from, date_to, new_price, price_diff)
+                SELECT s.province, s.cspcid, s.date_from, s.date_to, s.new_price, s.price_diff
                 FROM tmp_lto s
                 LEFT JOIN {TARGET_TABLE} t
-                       ON t.cspcid    = s.cspcid
+                       ON t.province  = s.province
+                      AND t.cspcid    = s.cspcid
                       AND t.date_from = s.date_from
                       AND t.date_to   = s.date_to
                 WHERE t.id IS NULL
@@ -128,7 +132,7 @@ def load_into_db(rows: List[List[Any]]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Load SLGA LTO data into lto_sk.')
+    parser = argparse.ArgumentParser(description='Load SLGA LTO data into lto.')
     parser.add_argument('files', nargs='+', type=Path, help='Path(s) to .xls/.xlsx LTO file(s)')
     args = parser.parse_args()
 

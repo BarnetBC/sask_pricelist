@@ -32,7 +32,7 @@ HEADER_TO_FIELD = {
     'Units/Case': 'multiple',
 }
 
-PROVINCE = 'SASK'
+PROVINCE = 'SK'
 
 INSERT_COLUMNS = [
     'price_date',
